@@ -18,12 +18,26 @@ model User {
   codeExpiresIn    DateTime?
   role             Role              @default(User)
   status           Status            @default(Pending)
+  provider         AuthProvider      @default(Email)
+  plan             Plan              @default(Gratuito)
+  language         Language          @default(Pt)
+  streakDays       Int               @default(0)
+  lastDreamAt      DateTime?
+  dreamsTotal      Int               @default(0)
+  npsAnswered      Boolean           @default(false)
   fileUrl          String?           @db.VarChar(1500)
   fileKey          String?           @db.VarChar(1500)
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   adminPermissions AdminPermission[]
   files            File[]
+  profile          DreamerProfile?
+  people           Person[]
+  anamnesisAnswers AnamnesisAnswer[]
+  dreams           Dream[]
+  dictionary       DictionaryEntry[]
+  insights         Insight[]
+  npsResponses     NpsResponse[]
 
   @@map("users")
 }
@@ -60,6 +74,175 @@ model Text {
   @@map("texts")
 }
 
+// ---------------------------------------------------------------------------
+// Dream Connection — domínio
+// ---------------------------------------------------------------------------
+
+/// Ficha anamnéstica (1:1 com o usuário). Os campos estruturados alimentam o
+/// "envelope" de contexto enviado à IA a cada decodificação.
+model DreamerProfile {
+  id             Int         @id @default(autoincrement())
+  user           User        @relation(fields: [userId], references: [id])
+  userId         Int         @unique
+  nickname       String?
+  lifeMoment     String?
+  work           String?
+  workFeel       String?
+  passions       Json?
+  fears          Json?
+  currentEmotion EmotionKey?
+  seeking        String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@map("dreamer_profiles")
+}
+
+/// Pessoas do círculo do usuário ("quem caminha com você"). Quando um nome
+/// daqui aparece num sonho, o app sugere um lembrete de contato.
+model Person {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int
+  name      String
+  relation  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("people")
+}
+
+/// Banco de perguntas da anamnese contínua. Servidas em blocos pequenos
+/// ("de cinco em cinco") ao longo dos dias para não sobrecarregar o usuário.
+model AnamnesisQuestion {
+  id        Int               @id @default(autoincrement())
+  prompt    String            @db.VarChar(500)
+  kind      QuestionKind      @default(Text)
+  options   Json?
+  category  String
+  sortOrder Int               @default(0)
+  active    Boolean           @default(true)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  answers   AnamnesisAnswer[]
+
+  @@map("anamnesis_questions")
+}
+
+model AnamnesisAnswer {
+  id         Int               @id @default(autoincrement())
+  user       User              @relation(fields: [userId], references: [id])
+  userId     Int
+  question   AnamnesisQuestion @relation(fields: [questionId], references: [id])
+  questionId Int
+  answer     String            @db.Text
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@unique([userId, questionId])
+  @@map("anamnesis_answers")
+}
+
+model Dream {
+  id               Int            @id @default(autoincrement())
+  user             User           @relation(fields: [userId], references: [id])
+  userId           Int
+  title            String?
+  text             String         @db.Text
+  captureMode      CaptureMode    @default(Texto)
+  eventToday       String?        @db.VarChar(500)
+  timeframe        Timeframe?
+  status           DreamStatus    @default(Registrado)
+  mainEmotion      EmotionKey?
+  secondaryEmotion EmotionKey?
+  movement         String?
+  dreamedAt        DateTime       @default(now())
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  elements         DreamElement[]
+  insight          Insight?
+
+  @@index([userId, dreamedAt])
+  @@map("dreams")
+}
+
+/// Elementos centrais extraídos do relato (substantivos, verbos, adjetivos e
+/// pronomes). O usuário atribui a cada um a emoção e o significado pessoal.
+model DreamElement {
+  id             Int         @id @default(autoincrement())
+  dream          Dream       @relation(fields: [dreamId], references: [id], onDelete: Cascade)
+  dreamId        Int
+  word           String
+  type           ElementType @default(Substantivo)
+  meaning        String?
+  emotionKey     EmotionKey?
+  fromDictionary Boolean     @default(false)
+  isPerson       Boolean     @default(false)
+  relation       String?
+  sortOrder      Int         @default(0)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([dreamId])
+  @@map("dream_elements")
+}
+
+/// Dicionário simbólico individual — nunca compartilhado entre contas.
+/// Reaproveitado a cada novo sonho e agregado na Jornada.
+model DictionaryEntry {
+  id         Int        @id @default(autoincrement())
+  user       User       @relation(fields: [userId], references: [id])
+  userId     Int
+  symbol     String
+  meaning    String?
+  emotionKey EmotionKey
+  count      Int        @default(1)
+  isPerson   Boolean    @default(false)
+  relation   String?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@unique([userId, symbol])
+  @@index([userId])
+  @@map("dictionary_entries")
+}
+
+/// Leitura gerada pela IA para um sonho. Tokens registrados para controle de
+/// custo por usuário/plano.
+model Insight {
+  id               Int         @id @default(autoincrement())
+  dream            Dream       @relation(fields: [dreamId], references: [id], onDelete: Cascade)
+  dreamId          Int         @unique
+  user             User        @relation(fields: [userId], references: [id])
+  userId           Int
+  mainEmotion      EmotionKey
+  secondaryEmotion EmotionKey?
+  movement         String
+  message          String      @db.Text
+  aiModel          String?
+  promptTokens     Int?
+  outputTokens     Int?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  @@index([userId])
+  @@map("insights")
+}
+
+/// Pesquisa de satisfação: oferecida a cada 5 sonhos enquanto não respondida.
+model NpsResponse {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int
+  score     Int
+  comment   String?  @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("nps_responses")
+}
+
 enum Role {
   Master
   Admin
@@ -83,4 +266,70 @@ enum TextType {
   Terms
   Tips
   Cookies
+}
+
+enum AuthProvider {
+  Email
+  Google
+  Apple
+}
+
+enum Plan {
+  Gratuito
+  Cobre
+  Prata
+  Ouro
+  Diamante
+}
+
+enum Language {
+  Pt
+  En
+  Es
+}
+
+/// As 12 emoções — âncora semântica de toda leitura.
+enum EmotionKey {
+  Alegria
+  Amor
+  Medo
+  Raiva
+  Tristeza
+  Confianca
+  Esperanca
+  Ansiedade
+  Culpa
+  Vergonha
+  Orgulho
+  Surpresa
+}
+
+enum CaptureMode {
+  Texto
+  Voz
+}
+
+enum Timeframe {
+  Passado
+  Presente
+  Futuro
+}
+
+enum DreamStatus {
+  Registrado
+  Decodificado
+}
+
+enum ElementType {
+  Substantivo
+  Verbo
+  Adjetivo
+  Pronome
+}
+
+enum QuestionKind {
+  Text
+  Choice
+  Multi
+  YesNo
 }

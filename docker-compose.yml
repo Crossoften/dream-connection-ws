@@ -5,7 +5,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: backend_application
+# Nomes únicos por projeto: o container_name genérico do boilerplate
+# ("database_application") colide com outros projetos na mesma máquina —
+# o último compose up "rouba" o container dos demais.
+    container_name: dream_connection_api
     command: tail -f /dev/null
     working_dir: /usr/app
     ports:
@@ -21,7 +24,7 @@ services:
 
   db:
     image: mysql:8.0
-    container_name: database_application
+    container_name: dream_connection_db
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
       MYSQL_DATABASE: ${DB_DATABASE}
