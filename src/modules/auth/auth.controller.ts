@@ -11,6 +11,7 @@ import {
 } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { IsPublic } from './decorators/is-public.decorator';
+import { GoogleLoginDto } from './dto/google-login.dto';
 import { LoginUserDto } from './dto/login-user.dto';
 import { RegisterUserDto } from './dto/register-user.dto';
 import { ResponseLoginDto } from './dto/response-login.dto';
@@ -35,6 +36,16 @@ export class AuthController {
     const { user } = req;
 
     return this.authService.login(user);
+  }
+
+  @IsPublic()
+  @Post('google')
+  @ApiOperation({ summary: 'Login com Google (idToken do Firebase).' })
+  @ApiOkResponse({ type: ResponseLoginDto })
+  @HttpCode(HttpStatus.OK)
+  @ApiBadRequestResponse({ description: 'Requisição inválida.' })
+  async google(@Body() body: GoogleLoginDto) {
+    return this.authService.googleLogin(body.idToken);
   }
 
   @IsPublic()

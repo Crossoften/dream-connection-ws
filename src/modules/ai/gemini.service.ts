@@ -59,8 +59,8 @@ Regras do método — siga TODAS:
 1. O significado é sempre do sonhador. Use exclusivamente as associações que ele atribuiu aos elementos (palavra → significado → emoção). Nunca use interpretações universais de símbolos.
 2. Tom: acolhedor, caloroso e levemente místico, como um horóscopo bem escrito. Frases amplas e abertas, que estimulem a reflexão e a vontade de registrar novos sonhos.
 3. Sempre subjetivo e probabilístico: use "sugere", "aponta", "parece", "convida". NUNCA afirme que algo vai acontecer, NUNCA faça diagnóstico ou promessa, NUNCA preveja eventos concretos, NUNCA mencione morte, doença ou tragédia como previsão.
-4. Escreva em português brasileiro, na segunda pessoa ("você"), em 4 a 6 frases corridas (sem listas, sem títulos).
-5. Estruture o texto nesta ordem: (a) a emoção principal que o sonho carrega; (b) o que os significados dados pelo sonhador revelam como movimento interno; (c) se houver emoção secundária, o fundo que ela adiciona; (d) se o sonho for do passado/presente/futuro, uma frase conectando a esse tempo; (e) se houver um compromisso importante hoje, uma sugestão gentil de postura para o dia (cautela leve, sem alarme); (f) uma mensagem final curta de acolhimento — no espírito de "mensagem ao sonhador".
+4. Escreva em português brasileiro, na segunda pessoa ("você"), em NO MÁXIMO 3 a 4 frases curtas e corridas (sem listas, sem títulos). Leituras longas cansam o sonhador: seja essencial, não exaustivo.
+5. Nessas poucas frases, priorize: (a) a emoção principal que o sonho carrega e o movimento interno que os significados do sonhador revelam; (b) UM toque de contexto — o tempo do sonho (passado/presente/futuro) OU o compromisso do dia, se informados; (c) um fechamento curto de acolhimento, no espírito de "mensagem ao sonhador". Não tente cobrir tudo.
 6. Se a ficha anamnéstica trouxer contexto (momento de vida, medos, o que busca), deixe isso colorir sutilmente a leitura, sem citar a ficha diretamente.
 7. Não repita o relato do sonho literalmente; transforme-o em leitura emocional.
 
@@ -346,28 +346,30 @@ export class GeminiService {
       .filter((e) => e.meaning)
       .map((e) => e.meaning!.toLowerCase());
 
-    const s1 = `Seu sonho carrega sobretudo ${main.label.toLowerCase()}.`;
-    const s2 = meanings.length
-      ? `Os sentidos que você deu — ${this.joinNice(meanings)} — apontam para um momento de ${main.movement.toLowerCase()}.`
-      : `Há um movimento de ${main.movement.toLowerCase()} atravessando a cena.`;
-    const s3 = secondary
-      ? ` No fundo, ${secondary.label.toLowerCase()} acompanha o que você sentiu.`
-      : '';
-    const s4 = ` ${main.closing}`;
+    // Leitura curta (3 frases): emoção + movimento, um toque de contexto e fechamento.
+    const top = meanings.slice(0, 3);
+    const s1 = top.length
+      ? `Seu sonho carrega sobretudo ${main.label.toLowerCase()} — os sentidos que você deu, como ${this.joinNice(top)}, apontam para ${main.movement.toLowerCase()}.`
+      : `Seu sonho carrega sobretudo ${main.label.toLowerCase()}, num movimento de ${main.movement.toLowerCase()}.`;
+
     const timeframeMap: Record<Timeframe, string> = {
-      Passado: 'Ele parece conversar com algo do seu passado.',
-      Presente: 'Ele dialoga com o seu presente.',
-      Futuro: 'Ele aponta para o que ainda está por vir.',
+      Passado: ' Ele conversa com algo do seu passado.',
+      Presente: ' Ele dialoga com o seu presente.',
+      Futuro: ' Ele aponta para o que está por vir.',
     };
-    const s5 = envelope.timeframe ? ` ${timeframeMap[envelope.timeframe]}` : '';
     const event = envelope.eventToday?.trim();
-    const s6 = event
-      ? ` Com ${event.toLowerCase()} à vista hoje, deixe que essa leitura te acompanhe com leveza.`
-      : '';
+    const s2 = event
+      ? ` Com ${event.toLowerCase()} hoje, leve essa leitura com leveza.`
+      : envelope.timeframe
+        ? timeframeMap[envelope.timeframe]
+        : secondary
+          ? ` No fundo, ${secondary.label.toLowerCase()} acompanha o que você sentiu.`
+          : '';
+    const s3 = ` ${main.closing}`;
 
     return {
       movement: main.movement,
-      message: `${s1} ${s2}${s3}${s4}${s5}${s6}`,
+      message: `${s1}${s2}${s3}`,
     };
   }
 

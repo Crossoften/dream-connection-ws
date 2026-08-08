@@ -60,21 +60,32 @@ export class DreamerService {
   }
 
   /**
-   * Anamnese contínua: devolve o próximo bloco de perguntas ainda não
-   * respondidas ("de cinco em cinco"), para o app perguntar aos poucos
-   * ao longo dos dias.
+   * Anamnese contínua: blocos de 5 perguntas, enriquecidos pelo uso —
+   * o usuário recebe 5 perguntas iniciais e libera mais 5 a cada 5 sonhos
+   * registrados. Dentro do saldo liberado, serve as pendentes (máx. 5 por vez).
    */
   async nextQuestions(userId: number) {
-    const answered = await this.prisma.anamnesisAnswer.findMany({
-      where: { userId },
-      select: { questionId: true },
-    });
-    const answeredIds = answered.map((a) => a.questionId);
+    const [answered, user] = await Promise.all([
+      this.prisma.anamnesisAnswer.findMany({
+        where: { userId },
+        select: { questionId: true },
+      }),
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { dreamsTotal: true },
+      }),
+    ]);
 
+    const allowance =
+      QUESTION_BATCH_SIZE * (1 + Math.floor((user?.dreamsTotal ?? 0) / QUESTION_BATCH_SIZE));
+    const remaining = allowance - answered.length;
+    if (remaining <= 0) return [];
+
+    const answeredIds = answered.map((a) => a.questionId);
     return this.prisma.anamnesisQuestion.findMany({
       where: { active: true, id: { notIn: answeredIds.length ? answeredIds : [0] } },
       orderBy: { sortOrder: 'asc' },
-      take: QUESTION_BATCH_SIZE,
+      take: Math.min(QUESTION_BATCH_SIZE, remaining),
     });
   }
 
