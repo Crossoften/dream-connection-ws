@@ -27,7 +27,7 @@ async function bootstrap() {
   app.setGlobalPrefix('/v1');
 
   const config = new DocumentBuilder()
-    .setTitle('Documentação da API Projeto X.')
+    .setTitle('Documentação da API Dream Connection')
     .setDescription('Essa API foi construída usando NestJS na versão 10.0')
     .setVersion('1.0')
     .addTag('Autenticação')
