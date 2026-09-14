@@ -1,131 +1,117 @@
 import { PrismaService } from '@database/PrismaService';
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { UpsertProfileDto } from './dto/upsert-profile.dto';
-import { CreatePersonDto } from './dto/person.dto';
+import { Injectable } from '@nestjs/common';
+import { AnamnesisQuestion } from '@prisma/client';
+import normalizeText from '@utils/normalizeText';
 import { AnswerQuestionsDto } from './dto/answer-questions.dto';
 
-/** Quantas perguntas da anamnese contínua são servidas por vez. */
+/** Tamanho de cada bloco da ficha: a abertura e cada nova liberação. */
 const QUESTION_BATCH_SIZE = 5;
+
+/** Categorias que sobem na fila conforme o conteúdo recente dos sonhos. */
+const PEOPLE_CATEGORIES = ['familia', 'afetivo'];
+const RECURRENCE_CATEGORIES = ['sonhos'];
 
 @Injectable()
 export class DreamerService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getProfile(userId: number) {
-    const [profile, people, answered, totalQuestions] = await Promise.all([
-      this.prisma.dreamerProfile.findUnique({ where: { userId } }),
-      this.prisma.person.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
-      this.prisma.anamnesisAnswer.count({ where: { userId } }),
+  /** Progresso da ficha: quantas perguntas o sonhador já respondeu. */
+  async progress(userId: number) {
+    const [answered, total] = await Promise.all([
+      this.prisma.anamnesisAnswer.count({ where: { userId, question: { active: true } } }),
       this.prisma.anamnesisQuestion.count({ where: { active: true } }),
     ]);
-
     return {
-      profile,
-      people,
-      completionPct: this.completionPct(profile, people.length),
-      anamnesis: { answered, total: totalQuestions },
+      answered,
+      total,
+      completionPct: total ? Math.round((answered / total) * 100) : 0,
     };
-  }
-
-  async upsertProfile(userId: number, dto: UpsertProfileDto) {
-    const data = {
-      nickname: dto.nickname,
-      lifeMoment: dto.lifeMoment,
-      work: dto.work,
-      workFeel: dto.workFeel,
-      passions: dto.passions,
-      fears: dto.fears,
-      currentEmotion: dto.currentEmotion,
-      seeking: dto.seeking,
-    };
-
-    await this.prisma.dreamerProfile.upsert({
-      where: { userId },
-      update: data,
-      create: { userId, ...data },
-    });
-
-    return this.getProfile(userId);
-  }
-
-  async addPerson(userId: number, dto: CreatePersonDto) {
-    return this.prisma.person.create({ data: { userId, name: dto.name, relation: dto.relation } });
-  }
-
-  async removePerson(userId: number, personId: number) {
-    const person = await this.prisma.person.findFirst({ where: { id: personId, userId } });
-    if (!person) throw new NotFoundException('Pessoa não encontrada.');
-    await this.prisma.person.delete({ where: { id: personId } });
-    return { message: 'Pessoa removida.' };
   }
 
   /**
-   * Anamnese contínua: blocos de 5 perguntas, enriquecidos pelo uso —
-   * o usuário recebe 5 perguntas iniciais e libera mais 5 a cada 5 sonhos
-   * registrados. Dentro do saldo liberado, serve as pendentes (máx. 5 por vez).
+   * Próximo bloco da ficha anamnéstica. O sonhador recebe 5 perguntas no
+   * primeiro acesso e libera mais 5 a cada 5 sonhos decodificados; dentro do
+   * saldo liberado, serve no máximo 5 por vez.
+   *
+   * Uma pergunta encadeada só entra quando a pergunta-mãe foi respondida com o
+   * valor esperado. A fila respeita a ordem da ficha, mas sobe as categorias
+   * ligadas ao que tem aparecido nos sonhos: pessoas puxam família e vida
+   * afetiva; símbolos que se repetem puxam as perguntas sobre sonhos.
    */
   async nextQuestions(userId: number) {
-    const [answered, user] = await Promise.all([
+    const [answers, user, questions] = await Promise.all([
       this.prisma.anamnesisAnswer.findMany({
         where: { userId },
-        select: { questionId: true },
+        select: { questionId: true, answer: true },
       }),
-      this.prisma.user.findUnique({
-        where: { id: userId },
-        select: { dreamsTotal: true },
+      this.prisma.user.findUnique({ where: { id: userId }, select: { dreamsTotal: true } }),
+      this.prisma.anamnesisQuestion.findMany({
+        where: { active: true },
+        orderBy: { sortOrder: 'asc' },
       }),
     ]);
 
     const allowance =
       QUESTION_BATCH_SIZE * (1 + Math.floor((user?.dreamsTotal ?? 0) / QUESTION_BATCH_SIZE));
-    const remaining = allowance - answered.length;
+    const activeIds = new Set(questions.map((q) => q.id));
+    const answeredActive = answers.filter((a) => activeIds.has(a.questionId)).length;
+    const remaining = allowance - answeredActive;
     if (remaining <= 0) return [];
 
-    const answeredIds = answered.map((a) => a.questionId);
-    return this.prisma.anamnesisQuestion.findMany({
-      where: { active: true, id: { notIn: answeredIds.length ? answeredIds : [0] } },
-      orderBy: { sortOrder: 'asc' },
-      take: Math.min(QUESTION_BATCH_SIZE, remaining),
-    });
+    const answerById = new Map(answers.map((a) => [a.questionId, a.answer]));
+    const eligible = questions.filter(
+      (q) =>
+        !answerById.has(q.id) &&
+        (q.dependsOnId == null ||
+          (answerById.has(q.dependsOnId) &&
+            normalizeText(answerById.get(q.dependsOnId)) === normalizeText(q.dependsOnAnswer))),
+    );
+
+    const priority = await this.priorityCategories(userId);
+    const ordered = priority.length ? this.prioritize(eligible, priority) : eligible;
+
+    return ordered.slice(0, Math.min(QUESTION_BATCH_SIZE, remaining));
   }
 
   async answerQuestions(userId: number, dto: AnswerQuestionsDto) {
+    const answers = dto.answers.filter((a) => a.answer?.trim());
     await this.prisma.$transaction(
-      dto.answers.map((a) =>
+      answers.map((a) =>
         this.prisma.anamnesisAnswer.upsert({
           where: { userId_questionId: { userId, questionId: a.questionId } },
-          update: { answer: a.answer },
-          create: { userId, questionId: a.questionId, answer: a.answer },
+          update: { answer: a.answer.trim() },
+          create: { userId, questionId: a.questionId, answer: a.answer.trim() },
         }),
       ),
     );
     return this.nextQuestions(userId);
   }
 
-  private completionPct(
-    profile: {
-      nickname: string | null;
-      lifeMoment: string | null;
-      work: string | null;
-      workFeel: string | null;
-      passions: unknown;
-      fears: unknown;
-      currentEmotion: string | null;
-    } | null,
-    peopleCount: number,
-  ): number {
-    if (!profile) return 0;
-    const slots = [
-      profile.nickname,
-      profile.lifeMoment,
-      peopleCount > 0,
-      profile.work,
-      profile.workFeel,
-      Array.isArray(profile.passions) && profile.passions.length > 0,
-      Array.isArray(profile.fears) && profile.fears.length > 0,
-      profile.currentEmotion,
+  private async priorityCategories(userId: number): Promise<string[]> {
+    const recentDreams = await this.prisma.dream.findMany({
+      where: { userId, status: 'Decodificado' },
+      orderBy: { dreamedAt: 'desc' },
+      take: QUESTION_BATCH_SIZE,
+      select: { id: true },
+    });
+    if (!recentDreams.length) return [];
+
+    const [peopleInDreams, recurringSymbols] = await Promise.all([
+      this.prisma.dreamElement.count({
+        where: { isPerson: true, dreamId: { in: recentDreams.map((d) => d.id) } },
+      }),
+      this.prisma.dictionaryEntry.count({ where: { userId, count: { gte: 3 } } }),
+    ]);
+
+    return [
+      ...(peopleInDreams > 0 ? PEOPLE_CATEGORIES : []),
+      ...(recurringSymbols > 0 ? RECURRENCE_CATEGORIES : []),
     ];
-    const done = slots.filter(Boolean).length;
-    return Math.round((done / slots.length) * 100);
+  }
+
+  private prioritize(questions: AnamnesisQuestion[], categories: string[]): AnamnesisQuestion[] {
+    const first = questions.filter((q) => categories.includes(q.category));
+    const rest = questions.filter((q) => !categories.includes(q.category));
+    return [...first, ...rest];
   }
 }

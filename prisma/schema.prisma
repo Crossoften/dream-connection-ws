@@ -14,7 +14,7 @@ model User {
   document         String?           @unique @db.VarChar(18)
   phone            String?           @unique
   password         String
-  code             String?           @db.VarChar(4)
+  code             String?           @db.VarChar(6)
   codeExpiresIn    DateTime?
   role             Role              @default(User)
   status           Status            @default(Pending)
@@ -31,8 +31,6 @@ model User {
   updatedAt        DateTime          @updatedAt
   adminPermissions AdminPermission[]
   files            File[]
-  profile          DreamerProfile?
-  people           Person[]
   anamnesisAnswers AnamnesisAnswer[]
   dreams           Dream[]
   dictionary       DictionaryEntry[]
@@ -78,54 +76,23 @@ model Text {
 // Dream Connection — domínio
 // ---------------------------------------------------------------------------
 
-/// Ficha anamnéstica (1:1 com o usuário). Os campos estruturados alimentam o
-/// "envelope" de contexto enviado à IA a cada decodificação.
-model DreamerProfile {
-  id             Int         @id @default(autoincrement())
-  user           User        @relation(fields: [userId], references: [id])
-  userId         Int         @unique
-  nickname       String?
-  lifeMoment     String?
-  work           String?
-  workFeel       String?
-  passions       Json?
-  fears          Json?
-  currentEmotion EmotionKey?
-  seeking        String?
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-
-  @@map("dreamer_profiles")
-}
-
-/// Pessoas do círculo do usuário ("quem caminha com você"). Quando um nome
-/// daqui aparece num sonho, o app sugere um lembrete de contato.
-model Person {
-  id        Int      @id @default(autoincrement())
-  user      User     @relation(fields: [userId], references: [id])
-  userId    Int
-  name      String
-  relation  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
-  @@map("people")
-}
-
-/// Banco de perguntas da anamnese contínua. Servidas em blocos pequenos
-/// ("de cinco em cinco") ao longo dos dias para não sobrecarregar o usuário.
+/// Ficha anamnéstica do idealizador: banco de perguntas servido em blocos de 5
+/// (a abertura no primeiro acesso e mais 5 a cada 5 sonhos decodificados).
+/// Uma pergunta pode depender da resposta de outra (ex.: a idade na separação
+/// só aparece para quem respondeu que os pais não viveram juntos).
 model AnamnesisQuestion {
-  id        Int               @id @default(autoincrement())
-  prompt    String            @db.VarChar(500)
-  kind      QuestionKind      @default(Text)
-  options   Json?
-  category  String
-  sortOrder Int               @default(0)
-  active    Boolean           @default(true)
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
-  answers   AnamnesisAnswer[]
+  id              Int               @id @default(autoincrement())
+  prompt          String            @db.VarChar(500)
+  kind            QuestionKind      @default(Text)
+  options         Json?
+  category        String
+  sortOrder       Int               @default(0)
+  active          Boolean           @default(true)
+  dependsOnId     Int?
+  dependsOnAnswer String?           @db.VarChar(190)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  answers         AnamnesisAnswer[]
 
   @@map("anamnesis_questions")
 }
@@ -152,6 +119,7 @@ model Dream {
   text             String         @db.Text
   captureMode      CaptureMode    @default(Texto)
   eventToday       String?        @db.VarChar(500)
+  /// Tempo predominante do sonho, derivado dos tempos marcados nos elementos.
   timeframe        Timeframe?
   status           DreamStatus    @default(Registrado)
   mainEmotion      EmotionKey?
@@ -168,7 +136,9 @@ model Dream {
 }
 
 /// Elementos centrais extraídos do relato (substantivos, verbos, adjetivos e
-/// pronomes). O usuário atribui a cada um a emoção e o significado pessoal.
+/// pronomes), em ordem de relevância. O sonhador atribui a cada um o
+/// significado pessoal, a emoção e, se quiser, se fala do passado, do presente
+/// ou do futuro.
 model DreamElement {
   id             Int         @id @default(autoincrement())
   dream          Dream       @relation(fields: [dreamId], references: [id], onDelete: Cascade)
@@ -177,6 +147,7 @@ model DreamElement {
   type           ElementType @default(Substantivo)
   meaning        String?
   emotionKey     EmotionKey?
+  timeframe      Timeframe?
   fromDictionary Boolean     @default(false)
   isPerson       Boolean     @default(false)
   relation       String?
@@ -208,8 +179,9 @@ model DictionaryEntry {
   @@map("dictionary_entries")
 }
 
-/// Leitura gerada pela IA para um sonho. Tokens registrados para controle de
-/// custo por usuário/plano.
+/// Decodificação emocional gerada pela IA, no formato do relatório do
+/// idealizador: movimento e estado emocional identificados, a decodificação e
+/// a mensagem final ao sonhador. Tokens registrados para controle de custo.
 model Insight {
   id               Int         @id @default(autoincrement())
   dream            Dream       @relation(fields: [dreamId], references: [id], onDelete: Cascade)
@@ -219,7 +191,9 @@ model Insight {
   mainEmotion      EmotionKey
   secondaryEmotion EmotionKey?
   movement         String
+  emotionalState   String?     @db.VarChar(190)
   message          String      @db.Text
+  finalMessage     String?     @db.Text
   aiModel          String?
   promptTokens     Int?
   outputTokens     Int?

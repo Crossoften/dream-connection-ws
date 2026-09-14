@@ -14,9 +14,6 @@ export class ResponseAllUserDto {
   @ApiProperty()
   phone: string;
 
-  @ApiProperty()
-  code: string;
-
   @ApiProperty({ enum: Role })
   role: string;
 

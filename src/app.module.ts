@@ -5,7 +5,6 @@ import { AuthModule } from './modules/auth/auth.module';
 import { LoginModule } from './modules/login/login.module';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
-import { UploadModule } from './modules/upload/upload.module';
 import { ConfigModule } from '@nestjs/config';
 import { MailModule } from './modules/mail/mail.module';
 import { NoAuthModule } from './modules/no-auth/no-auth.module';
@@ -31,7 +30,6 @@ import { NpsModule } from './modules/nps/nps.module';
     PrismaModule,
     AuthModule,
     LoginModule,
-    UploadModule,
     MailModule,
     NoAuthModule,
     AdminModule,

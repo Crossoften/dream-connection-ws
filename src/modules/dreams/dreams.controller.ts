@@ -28,7 +28,9 @@ export class DreamsController {
 
   @Post()
   @ApiOperation({
-    summary: 'Registra um sonho e extrai os elementos centrais (com pré-preenchimento do dicionário).',
+    summary: 'Registra um sonho e extrai os elementos centrais, em ordem de relevância.',
+    description:
+      'Até 8 elementos (substantivos, verbos, adjetivos e pronomes), sem repetição. Pessoas vêm marcadas (`isPerson`); símbolos já conhecidos vêm pré-preenchidos com o significado e a emoção do dicionário pessoal (`fromDictionary`).',
     security: [{ bearerAuth: [] }],
   })
   @ApiCreatedResponse({ description: 'Sonho registrado com elementos extraídos.' })
@@ -47,14 +49,14 @@ export class DreamsController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Recupera um sonho específico.', security: [{ bearerAuth: [] }] })
-  @ApiOkResponse({ description: 'Sonho com elementos e insight.' })
+  @ApiOkResponse({ description: 'Sonho com elementos e decodificação.' })
   findOne(@CurrentUser() user: User, @Param('id', ParseIntPipe) id: number) {
     return this.dreamsService.findOwned(user.id, id);
   }
 
   @Put(':id/elements')
   @ApiOperation({
-    summary: 'Atualiza as atribuições de significado/emoção dos elementos do sonho.',
+    summary: 'Atualiza as atribuições dos elementos: significado, emoção e tempo.',
     security: [{ bearerAuth: [] }],
   })
   @ApiOkResponse({ description: 'Elementos atualizados.' })
@@ -69,10 +71,12 @@ export class DreamsController {
 
   @Post(':id/insight')
   @ApiOperation({
-    summary: 'Gera o insight do sonho via IA (atualiza dicionário pessoal e streak).',
+    summary: 'Decodifica o sonho via IA.',
+    description:
+      'Devolve o sonho com `insight`: emoção principal e secundária, movimento emocional identificado (`movement`), estado emocional predominante (`emotionalState`), a mensagem emocional do sonho (`message`) e a mensagem final ao sonhador (`finalMessage`). Atualiza o dicionário pessoal e a sequência de noites. Chamar de novo devolve a decodificação já gerada.',
     security: [{ bearerAuth: [] }],
   })
-  @ApiCreatedResponse({ description: 'Insight gerado e persistido.' })
+  @ApiCreatedResponse({ description: 'Decodificação gerada e persistida.' })
   @ApiBadRequestResponse({ description: 'Nenhuma emoção associada aos elementos.' })
   generateInsight(@CurrentUser() user: User, @Param('id', ParseIntPipe) id: number) {
     return this.dreamsService.generateInsight(user.id, id);

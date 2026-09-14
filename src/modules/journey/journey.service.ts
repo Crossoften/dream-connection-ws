@@ -9,12 +9,15 @@ const WEEKDAY_LETTERS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 export class JourneyService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Painel da Jornada: emoção do mês, últimos 7 dias, distribuição e símbolos. */
+  /**
+   * Painel da Jornada: emoção do mês, últimos 7 dias, distribuição, símbolos
+   * recorrentes e as pessoas que estiveram presentes nos sonhos.
+   */
   async dashboard(userId: number) {
     const since = new Date();
     since.setDate(since.getDate() - 90);
 
-    const [elements, topSymbols, monthDreams, weekDreams] = await Promise.all([
+    const [elements, topSymbols, monthDreams, weekDreams, personElements] = await Promise.all([
       this.prisma.dreamElement.findMany({
         where: { dream: { userId, dreamedAt: { gte: since } }, emotionKey: { not: null } },
         select: { emotionKey: true },
@@ -35,6 +38,10 @@ export class JourneyService {
       this.prisma.dream.findMany({
         where: { userId, dreamedAt: { gte: this.daysAgo(6) } },
         select: { dreamedAt: true, mainEmotion: true },
+      }),
+      this.prisma.dreamElement.findMany({
+        where: { isPerson: true, dream: { userId, status: 'Decodificado' } },
+        select: { word: true, emotionKey: true, dreamId: true },
       }),
     ]);
 
@@ -64,7 +71,28 @@ export class JourneyService {
       emotionOfMonth,
       monthLabel,
       summary: this.buildSummary(monthTally),
+      people: this.buildPeople(personElements),
     };
+  }
+
+  /** Quem esteve nos sonhos: em quantos sonhos cada pessoa apareceu e a emoção mais ligada a ela. */
+  private buildPeople(elements: { word: string; emotionKey: EmotionKey | null; dreamId: number }[]) {
+    const byName = new Map<string, { name: string; dreams: Set<number>; emotions: EmotionKey[] }>();
+    for (const el of elements) {
+      const key = el.word.toLowerCase();
+      const entry = byName.get(key) ?? { name: el.word, dreams: new Set<number>(), emotions: [] };
+      entry.dreams.add(el.dreamId);
+      if (el.emotionKey) entry.emotions.push(el.emotionKey);
+      byName.set(key, entry);
+    }
+    return [...byName.values()]
+      .map((p) => ({
+        name: p.name,
+        count: p.dreams.size,
+        emotionKey: this.tally(p.emotions)[0]?.key ?? null,
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
   }
 
   private buildWeekly(dreams: { dreamedAt: Date; mainEmotion: EmotionKey | null }[]) {

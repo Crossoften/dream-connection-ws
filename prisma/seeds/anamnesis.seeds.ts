@@ -1,16 +1,50 @@
 import { PrismaClient, QuestionKind } from '@prisma/client';
 
 /**
- * Banco inicial da anamnese contínua ("de cinco em cinco").
- * Perguntas curtas, servidas aos poucos ao longo dos dias, para a IA
- * conhecer o sonhador sem cansá-lo — conforme metodologia do idealizador.
+ * Banco da ficha anamnéstica — servido em blocos de 5: a abertura no primeiro
+ * acesso e mais 5 a cada 5 sonhos decodificados.
+ *
+ * PROVISÓRIO: a lista oficial do idealizador (~50 perguntas, citada na reunião
+ * de 30/06/2026) ainda não chegou à equipe. Estas perguntas vêm do que ele
+ * disse nas reuniões — "seu nome, você é casado, é solteiro… você gosta de
+ * viajar? … você tem pai? … seus pais vivem juntos? … quando se separaram?
+ * … se gosta de altura… se gosta de festa" (19/06 e 30/06). Quando a lista
+ * oficial chegar, basta substituir QUESTIONS e rodar o seed: a sincronização
+ * é por texto da pergunta, preserva as respostas já dadas e desativa (sem
+ * apagar) o que sair da lista.
+ *
+ * `dependsOn` + `whenAnswer`: a pergunta só aparece quando a pergunta-mãe foi
+ * respondida com aquele valor (comparação sem acento e sem caixa).
  */
-const QUESTIONS: { prompt: string; kind: QuestionKind; options?: string[]; category: string }[] = [
+interface BankQuestion {
+  prompt: string;
+  kind: QuestionKind;
+  category: string;
+  options?: string[];
+  dependsOn?: string;
+  whenAnswer?: string;
+}
+
+const QUESTIONS: BankQuestion[] = [
+  // Abertura
+  {
+    prompt: 'Qual é o seu estado civil?',
+    kind: 'Choice',
+    options: ['Solteiro(a)', 'Casado(a)', 'União estável', 'Separado(a) ou divorciado(a)', 'Viúvo(a)'],
+    category: 'afetivo',
+  },
+
   // Família e origens
   { prompt: 'Seu pai está presente na sua vida?', kind: 'YesNo', category: 'familia' },
   { prompt: 'Sua mãe está presente na sua vida?', kind: 'YesNo', category: 'familia' },
   { prompt: 'Seus pais viveram juntos durante a sua infância?', kind: 'YesNo', category: 'familia' },
-  { prompt: 'Se seus pais se separaram, que idade você tinha?', kind: 'Text', category: 'familia' },
+  {
+    prompt: 'Se seus pais se separaram, que idade você tinha?',
+    kind: 'Text',
+    category: 'familia',
+    dependsOn: 'Seus pais viveram juntos durante a sua infância?',
+    whenAnswer: 'Não',
+  },
   { prompt: 'Como é (ou era) a sua relação com a sua mãe?', kind: 'Choice', options: ['Muito próxima', 'Boa', 'Distante', 'Conflituosa', 'Prefiro não dizer'], category: 'familia' },
   { prompt: 'Como é (ou era) a sua relação com o seu pai?', kind: 'Choice', options: ['Muito próxima', 'Boa', 'Distante', 'Conflituosa', 'Prefiro não dizer'], category: 'familia' },
   { prompt: 'Você tem irmãos? Como é a relação com eles?', kind: 'Text', category: 'familia' },
@@ -51,23 +85,52 @@ const QUESTIONS: { prompt: string; kind: QuestionKind; options?: string[]; categ
   { prompt: 'Quando o sonho é ruim, o que você costuma sentir ao acordar?', kind: 'Choice', options: ['Medo', 'Ansiedade', 'Tristeza', 'Alívio ao perceber que era sonho', 'Curiosidade'], category: 'sonhos' },
 ];
 
+/** Sincroniza o banco de perguntas com QUESTIONS (idempotente). */
 export async function seedAnamnesis(prisma: PrismaClient) {
-  const count = await prisma.anamnesisQuestion.count();
-  if (count > 0) {
-    console.log('Anamnesis questions already seeded, skipping.');
-    return;
-  }
+  const existing = await prisma.anamnesisQuestion.findMany();
+  const byPrompt = new Map(existing.map((q) => [q.prompt, q]));
+  const idByPrompt = new Map<string, number>();
 
-  await prisma.anamnesisQuestion.createMany({
-    data: QUESTIONS.map((q, index) => ({
-      prompt: q.prompt,
+  let created = 0;
+  let updated = 0;
+
+  for (const [index, q] of QUESTIONS.entries()) {
+    const data = {
       kind: q.kind,
       options: q.options ?? undefined,
       category: q.category,
       sortOrder: index,
       active: true,
-    })),
+    };
+    const current = byPrompt.get(q.prompt);
+    if (current) {
+      await prisma.anamnesisQuestion.update({ where: { id: current.id }, data });
+      idByPrompt.set(q.prompt, current.id);
+      updated++;
+    } else {
+      const row = await prisma.anamnesisQuestion.create({ data: { prompt: q.prompt, ...data } });
+      idByPrompt.set(q.prompt, row.id);
+      created++;
+    }
+  }
+
+  for (const q of QUESTIONS) {
+    const dependsOnId = q.dependsOn ? idByPrompt.get(q.dependsOn) : null;
+    if (q.dependsOn && !dependsOnId) {
+      throw new Error(`Pergunta-mãe não encontrada no banco: "${q.dependsOn}"`);
+    }
+    await prisma.anamnesisQuestion.update({
+      where: { id: idByPrompt.get(q.prompt)! },
+      data: { dependsOnId: dependsOnId ?? null, dependsOnAnswer: q.whenAnswer ?? null },
+    });
+  }
+
+  const retired = await prisma.anamnesisQuestion.updateMany({
+    where: { prompt: { notIn: QUESTIONS.map((q) => q.prompt) }, active: true },
+    data: { active: false },
   });
 
-  console.log('Anamnesis questions seed added successfully 🌱.');
+  console.log(
+    `Ficha anamnéstica sincronizada 🌱 — ${QUESTIONS.length} perguntas (${created} novas, ${updated} atualizadas, ${retired.count} desativadas).`,
+  );
 }

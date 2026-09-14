@@ -1,13 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  ParseIntPipe,
-  Post,
-  Put,
-} from '@nestjs/common';
+import { Body, Controller, Get, Post } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiCreatedResponse,
@@ -18,63 +9,64 @@ import {
 import { User } from '@prisma/client';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { DreamerService } from './dreamer.service';
-import { UpsertProfileDto } from './dto/upsert-profile.dto';
-import { CreatePersonDto } from './dto/person.dto';
 import { AnswerQuestionsDto } from './dto/answer-questions.dto';
 
 @ApiTags('Ficha anamnéstica')
-@Controller('dreamer')
+@Controller('dreamer/anamnesis')
 export class DreamerController {
   constructor(private readonly dreamerService: DreamerService) {}
 
-  @Get('profile')
+  @Get('progress')
   @ApiOperation({
-    summary: 'Recupera a ficha anamnéstica, pessoas do círculo e progresso.',
+    summary: 'Progresso da ficha anamnéstica.',
+    description:
+      'Quantas perguntas ativas o sonhador já respondeu. `answered = 0` indica que a abertura da ficha ainda não foi feita.',
     security: [{ bearerAuth: [] }],
   })
-  @ApiOkResponse({ description: 'Ficha do usuário.' })
-  getProfile(@CurrentUser() user: User) {
-    return this.dreamerService.getProfile(user.id);
+  @ApiOkResponse({
+    description: 'Progresso da ficha.',
+    schema: { example: { answered: 5, total: 31, completionPct: 16 } },
+  })
+  progress(@CurrentUser() user: User) {
+    return this.dreamerService.progress(user.id);
   }
 
-  @Put('profile')
-  @ApiOperation({ summary: 'Cria/atualiza a ficha anamnéstica.', security: [{ bearerAuth: [] }] })
-  @ApiOkResponse({ description: 'Ficha atualizada.' })
-  @ApiBadRequestResponse({ description: 'Requisição inválida.' })
-  upsertProfile(@CurrentUser() user: User, @Body() body: UpsertProfileDto) {
-    return this.dreamerService.upsertProfile(user.id, body);
-  }
-
-  @Post('people')
-  @ApiOperation({ summary: 'Adiciona uma pessoa ao círculo.', security: [{ bearerAuth: [] }] })
-  @ApiCreatedResponse({ description: 'Pessoa adicionada.' })
-  addPerson(@CurrentUser() user: User, @Body() body: CreatePersonDto) {
-    return this.dreamerService.addPerson(user.id, body);
-  }
-
-  @Delete('people/:id')
-  @ApiOperation({ summary: 'Remove uma pessoa do círculo.', security: [{ bearerAuth: [] }] })
-  @ApiOkResponse({ description: 'Pessoa removida.' })
-  removePerson(@CurrentUser() user: User, @Param('id', ParseIntPipe) id: number) {
-    return this.dreamerService.removePerson(user.id, id);
-  }
-
-  @Get('anamnesis/next')
+  @Get('next')
   @ApiOperation({
-    summary: 'Próximo bloco de perguntas da anamnese contínua (5 por vez).',
+    summary: 'Próximo bloco da ficha (até 5 perguntas).',
+    description:
+      'Abertura: 5 perguntas no primeiro acesso. Depois, mais 5 a cada 5 sonhos decodificados. Perguntas encadeadas só aparecem quando a pergunta-mãe foi respondida com o valor esperado; categorias ligadas ao que aparece nos sonhos sobem na fila.',
     security: [{ bearerAuth: [] }],
   })
-  @ApiOkResponse({ description: 'Perguntas pendentes.' })
+  @ApiOkResponse({
+    description: 'Perguntas liberadas e ainda não respondidas (lista vazia quando não há).',
+    schema: {
+      example: [
+        {
+          id: 31,
+          prompt: 'Qual é o seu estado civil?',
+          kind: 'Choice',
+          options: ['Solteiro(a)', 'Casado(a)', 'União estável', 'Separado(a) ou divorciado(a)', 'Viúvo(a)'],
+          category: 'afetivo',
+          sortOrder: 0,
+          dependsOnId: null,
+          dependsOnAnswer: null,
+        },
+      ],
+    },
+  })
   nextQuestions(@CurrentUser() user: User) {
     return this.dreamerService.nextQuestions(user.id);
   }
 
-  @Post('anamnesis/answers')
+  @Post('answers')
   @ApiOperation({
-    summary: 'Registra respostas da anamnese contínua.',
+    summary: 'Registra respostas da ficha.',
+    description: 'Respostas em branco são ignoradas. Responder de novo a mesma pergunta atualiza a resposta.',
     security: [{ bearerAuth: [] }],
   })
-  @ApiCreatedResponse({ description: 'Respostas registradas; devolve o próximo bloco.' })
+  @ApiCreatedResponse({ description: 'Respostas registradas; devolve o próximo bloco liberado.' })
+  @ApiBadRequestResponse({ description: 'Corpo inválido (questionId ausente ou resposta acima de 1000 caracteres).' })
   answerQuestions(@CurrentUser() user: User, @Body() body: AnswerQuestionsDto) {
     return this.dreamerService.answerQuestions(user.id, body);
   }

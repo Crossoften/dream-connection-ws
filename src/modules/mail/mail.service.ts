@@ -35,7 +35,7 @@ export class MailService {
   <p>Você deu início ao cadastro em nossa plataforma, para prosseguir digite o código abaixo:</p>
   <p><strong>Código:</strong> ${code}</p>
   <br/>
-  <p>Equipe Projeto X.</p>
+  <p>Equipe Dream Connection.</p>
 </body>
 
 </html>
@@ -44,7 +44,7 @@ export class MailService {
     await this.transporter.sendMail({
       from: `"No Reply" <${this.configService.get<string>('MAIL_FROM')}>`,
       to,
-      subject: 'Boas vindas ao nosso APP X!',
+      subject: 'Boas-vindas ao Dream Connection',
       html: HTML,
     });
   }
@@ -84,14 +84,14 @@ export class MailService {
 <html>
 
 <head>
-  <title>Bem vindo!</title>
+  <title>Redefinição de senha</title>
 </head>
 
 <body>
   <h3>Olá!</h3>
-  <p>Você solicitou recuperação de senha, estamos enviando o código necessário para refefini-la.</p>
+  <p>Você solicitou a recuperação de senha do Dream Connection. Use o código abaixo para redefini-la.</p>
   <p><strong>Código:</strong> ${code}</p>
-  <p>O código tem validade de 4 horas, após esse periodo, será necessário gerar um novo.</p>
+  <p>O código vale por 1 hora e só pode ser usado uma vez. Se não foi você que pediu, ignore este e-mail.</p>
 </body>
 
 </html>
@@ -100,7 +100,7 @@ export class MailService {
     await this.transporter.sendMail({
       from: `"No Reply" <${this.configService.get<string>('MAIL_FROM')}>`,
       to: email,
-      subject: 'Recuperação de senha, Projeto X.',
+      subject: 'Dream Connection — código para redefinir sua senha',
       html: HTML,
     });
   }

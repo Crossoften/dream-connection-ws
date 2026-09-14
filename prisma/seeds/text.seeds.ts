@@ -6,6 +6,11 @@ import { termsText } from './texts/termsText';
 import { tipsText } from './texts/tipsText';
 
 export async function seedText(prisma: PrismaClient) {
+  if ((await prisma.text.count()) > 0) {
+    console.log('Texts already seeded, skipping.');
+    return;
+  }
+
   await prisma.text.createMany({
     data: [
       {

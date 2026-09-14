@@ -46,10 +46,9 @@ export class AuthService {
       data: {
         name: dto.name,
         email: dto.email,
-        password: hashSync(dto.password, 10),
+        password: hashSync(dto.password, 12),
         status: Status.Active,
         provider: 'Email',
-        profile: { create: {} },
       },
     });
 
@@ -89,10 +88,9 @@ export class AuthService {
         data: {
           name,
           email,
-          password: hashSync(randomBytes(24).toString('hex'), 10),
+          password: hashSync(randomBytes(24).toString('hex'), 12),
           status: Status.Active,
           provider: 'Google',
-          profile: { create: {} },
         },
       })) as any;
     }
