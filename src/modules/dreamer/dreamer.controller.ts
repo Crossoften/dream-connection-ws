@@ -20,12 +20,12 @@ export class DreamerController {
   @ApiOperation({
     summary: 'Progresso da ficha anamnéstica.',
     description:
-      'Quantas perguntas ativas o sonhador já respondeu. `answered = 0` indica que a abertura da ficha ainda não foi feita.',
+      'Quantas perguntas ativas o sonhador já respondeu. Pergunta de seguimento só entra na conta quando se aplica (ex.: "Quantos filhos você tem?" só para quem respondeu "Sim" em "Possui filhos?"). `answered = 0` indica que a abertura da ficha ainda não foi feita.',
     security: [{ bearerAuth: [] }],
   })
   @ApiOkResponse({
     description: 'Progresso da ficha.',
-    schema: { example: { answered: 5, total: 31, completionPct: 16 } },
+    schema: { example: { answered: 5, total: 41, completionPct: 12 } },
   })
   progress(@CurrentUser() user: User) {
     return this.dreamerService.progress(user.id);
@@ -33,9 +33,9 @@ export class DreamerController {
 
   @Get('next')
   @ApiOperation({
-    summary: 'Próximo bloco da ficha (até 5 perguntas).',
+    summary: 'Próximo bloco da ficha (até 5 perguntas, mais as de seguimento).',
     description:
-      'Abertura: 5 perguntas no primeiro acesso. Depois, mais 5 a cada 5 sonhos decodificados. Perguntas encadeadas só aparecem quando a pergunta-mãe foi respondida com o valor esperado; categorias ligadas ao que aparece nos sonhos sobem na fila.',
+      'Abertura: 5 perguntas no primeiro acesso. Depois, mais 5 a cada 5 sonhos decodificados. Perguntas de seguimento ("Se sim, quantos?") vêm primeiro, só quando a pergunta-mãe tem a resposta que as libera, e não gastam o saldo do bloco. Categorias ligadas ao que aparece nos sonhos sobem na fila. `followUpWhen` lista as respostas que liberam uma pergunta de seguimento.',
     security: [{ bearerAuth: [] }],
   })
   @ApiOkResponse({
@@ -43,14 +43,15 @@ export class DreamerController {
     schema: {
       example: [
         {
-          id: 31,
-          prompt: 'Qual é o seu estado civil?',
-          kind: 'Choice',
-          options: ['Solteiro(a)', 'Casado(a)', 'União estável', 'Separado(a) ou divorciado(a)', 'Viúvo(a)'],
-          category: 'afetivo',
-          sortOrder: 0,
+          id: 32,
+          prompt: 'Possui filhos?',
+          kind: 'YesNo',
+          options: null,
+          category: 'familia',
+          sortOrder: 4,
           dependsOnId: null,
           dependsOnAnswer: null,
+          followUpWhen: ['Sim'],
         },
       ],
     },

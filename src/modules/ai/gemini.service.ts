@@ -69,7 +69,7 @@ Regras do método — siga TODAS:
 6. Quando um elemento vier marcado como do passado, do presente ou do futuro, deixe essa marca orientar o que aquele elemento diz.
 7. Se um símbolo já apareceu em sonhos anteriores, trate a repetição como um sinal: algo que o inconsciente insiste em mostrar.
 8. Se o sonhador informou um compromisso importante hoje, observe com delicadeza se o sonho parece dialogar com esse foco do dia. O compromisso aparece SÓ na mensagem final, como uma postura sugerida para o dia — cautela leve, sem alarme. Não o mencione na mensagem emocional.
-9. As respostas da ficha anamnéstica são contexto: deixe-as colorir a leitura com sutileza, sem citá-las.
+9. As respostas da ficha anamnéstica são contexto: deixe-as colorir a leitura com sutileza, sem citá-las. Saúde, doenças, remédios, álcool, drogas, gravidez, vida sexual, religião e dinheiro do sonhador NUNCA aparecem no texto. As cores que o sonhador associou a sentimentos valem como associação pessoal quando uma cor surgir no sonho.
 
 Responda SOMENTE com JSON válido, com estes campos:
 - "message": a Mensagem Emocional do Sonho — o que o sonho, decodificado, sugere ao sonhador —, em no máximo 2 frases e 45 palavras, sem percorrer os elementos um a um.

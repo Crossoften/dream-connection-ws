@@ -9,18 +9,30 @@ const QUESTION_BATCH_SIZE = 5;
 
 /** Categorias que sobem na fila conforme o conteúdo recente dos sonhos. */
 const PEOPLE_CATEGORIES = ['familia', 'afetivo'];
-const RECURRENCE_CATEGORIES = ['sonhos'];
+const RECURRENCE_CATEGORIES = ['sonhos', 'simbolos'];
 
 @Injectable()
 export class DreamerService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Progresso da ficha: quantas perguntas o sonhador já respondeu. */
+  /**
+   * Progresso da ficha. Pergunta de seguimento só conta quando se aplica: quem
+   * respondeu "Não" para "Possui filhos?" não fica devendo "Quantos filhos?".
+   */
   async progress(userId: number) {
-    const [answered, total] = await Promise.all([
-      this.prisma.anamnesisAnswer.count({ where: { userId, question: { active: true } } }),
-      this.prisma.anamnesisQuestion.count({ where: { active: true } }),
+    const [answers, questions] = await Promise.all([
+      this.prisma.anamnesisAnswer.findMany({
+        where: { userId, question: { active: true } },
+        select: { questionId: true, answer: true },
+      }),
+      this.prisma.anamnesisQuestion.findMany({ where: { active: true } }),
     ]);
+
+    const answerById = new Map(answers.map((a) => [a.questionId, a.answer]));
+    const applicable = questions.filter((q) => q.dependsOnId == null || this.released(q, answerById));
+    const answered = applicable.filter((q) => answerById.has(q.id)).length;
+    const total = applicable.length;
+
     return {
       answered,
       total,
@@ -33,10 +45,16 @@ export class DreamerService {
    * primeiro acesso e libera mais 5 a cada 5 sonhos decodificados; dentro do
    * saldo liberado, serve no máximo 5 por vez.
    *
-   * Uma pergunta encadeada só entra quando a pergunta-mãe foi respondida com o
-   * valor esperado. A fila respeita a ordem da ficha, mas sobe as categorias
-   * ligadas ao que tem aparecido nos sonhos: pessoas puxam família e vida
-   * afetiva; símbolos que se repetem puxam as perguntas sobre sonhos.
+   * Perguntas de seguimento ("Se sim, quantos?") vêm antes de tudo e não gastam
+   * o saldo: no formulário do idealizador elas moram na mesma linha da
+   * pergunta-mãe, então aparecem logo depois dela, mesmo no fim de um bloco.
+   *
+   * A fila respeita a ordem da ficha, mas sobe as categorias ligadas ao que tem
+   * aparecido nos sonhos: pessoas puxam família e vida afetiva; símbolos que se
+   * repetem puxam os sonhos e o repertório simbólico (as cores).
+   *
+   * Cada pergunta devolvida traz `followUpWhen`: as respostas que liberam uma
+   * pergunta de seguimento, para o app saber se ainda há um passo depois dela.
    */
   async nextQuestions(userId: number) {
     const [answers, user, questions] = await Promise.all([
@@ -51,26 +69,32 @@ export class DreamerService {
       }),
     ]);
 
+    const answerById = new Map(answers.map((a) => [a.questionId, a.answer]));
+    const unanswered = questions.filter((q) => !answerById.has(q.id));
+    const followUps = unanswered.filter((q) => q.dependsOnId != null && this.released(q, answerById));
+    const base = unanswered.filter((q) => q.dependsOnId == null);
+
     const allowance =
       QUESTION_BATCH_SIZE * (1 + Math.floor((user?.dreamsTotal ?? 0) / QUESTION_BATCH_SIZE));
-    const activeIds = new Set(questions.map((q) => q.id));
-    const answeredActive = answers.filter((a) => activeIds.has(a.questionId)).length;
-    const remaining = allowance - answeredActive;
-    if (remaining <= 0) return [];
+    const answeredBase = questions.filter((q) => q.dependsOnId == null && answerById.has(q.id)).length;
+    const remaining = Math.max(0, allowance - answeredBase);
 
-    const answerById = new Map(answers.map((a) => [a.questionId, a.answer]));
-    const eligible = questions.filter(
-      (q) =>
-        !answerById.has(q.id) &&
-        (q.dependsOnId == null ||
-          (answerById.has(q.dependsOnId) &&
-            normalizeText(answerById.get(q.dependsOnId)) === normalizeText(q.dependsOnAnswer))),
-    );
+    let ordered = base;
+    if (remaining > 0) {
+      const priority = await this.priorityCategories(userId);
+      if (priority.length) ordered = this.prioritize(base, priority);
+    }
 
-    const priority = await this.priorityCategories(userId);
-    const ordered = priority.length ? this.prioritize(eligible, priority) : eligible;
+    const followUpWhen = new Map<number, string[]>();
+    for (const q of questions) {
+      if (q.dependsOnId == null || !q.dependsOnAnswer) continue;
+      followUpWhen.set(q.dependsOnId, [...(followUpWhen.get(q.dependsOnId) ?? []), q.dependsOnAnswer]);
+    }
 
-    return ordered.slice(0, Math.min(QUESTION_BATCH_SIZE, remaining));
+    return [...followUps, ...ordered.slice(0, Math.min(QUESTION_BATCH_SIZE, remaining))].map((q) => ({
+      ...q,
+      followUpWhen: followUpWhen.get(q.id) ?? [],
+    }));
   }
 
   async answerQuestions(userId: number, dto: AnswerQuestionsDto) {
@@ -85,6 +109,15 @@ export class DreamerService {
       ),
     );
     return this.nextQuestions(userId);
+  }
+
+  /** Pergunta de seguimento liberada: a mãe tem exatamente a resposta esperada. */
+  private released(question: AnamnesisQuestion, answerById: Map<number, string>): boolean {
+    return (
+      question.dependsOnId != null &&
+      answerById.has(question.dependsOnId) &&
+      normalizeText(answerById.get(question.dependsOnId)) === normalizeText(question.dependsOnAnswer)
+    );
   }
 
   private async priorityCategories(userId: number): Promise<string[]> {
