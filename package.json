@@ -92,6 +92,12 @@
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "moduleNameMapper": {
+      "^@database/(.*)$": "<rootDir>/database/$1",
+      "^@interfaces/(.*)$": "<rootDir>/interfaces/$1",
+      "^@enums/(.*)$": "<rootDir>/enums/$1",
+      "^@utils/(.*)$": "<rootDir>/utils/$1"
+    }
   }
 }
