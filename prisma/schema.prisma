@@ -8,36 +8,43 @@ datasource db {
 }
 
 model User {
-  id               Int               @id @default(autoincrement())
-  name             String
-  email            String            @unique
-  document         String?           @unique @db.VarChar(18)
-  phone            String?           @unique
-  password         String
-  code             String?           @db.VarChar(6)
-  codeExpiresIn    DateTime?
-  role             Role              @default(User)
-  status           Status            @default(Pending)
-  provider         AuthProvider      @default(Email)
-  plan             Plan              @default(Gratuito)
-  trialEndsAt      DateTime?
-  language         Language          @default(Pt)
-  streakDays       Int               @default(0)
-  lastDreamAt      DateTime?
-  dreamsTotal      Int               @default(0)
-  npsAnswered      Boolean           @default(false)
-  fileUrl          String?           @db.VarChar(1500)
-  fileKey          String?           @db.VarChar(1500)
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  adminPermissions AdminPermission[]
-  files            File[]
-  anamnesisAnswers AnamnesisAnswer[]
-  dreams           Dream[]
-  dictionary       DictionaryEntry[]
-  insights         Insight[]
-  npsResponses     NpsResponse[]
-  planChanges      PlanChange[]
+  id                Int                @id @default(autoincrement())
+  name              String
+  email             String             @unique
+  document          String?            @unique @db.VarChar(18)
+  phone             String?            @unique
+  password          String
+  code              String?            @db.VarChar(6)
+  codeExpiresIn     DateTime?
+  role              Role               @default(User)
+  status            Status             @default(Pending)
+  provider          AuthProvider       @default(Email)
+  plan              Plan               @default(Gratuito)
+  trialEndsAt       DateTime?
+  /// Lembrete para contar o sonho. `reminderTime` é HH:mm no fuso do usuário.
+  reminderEnabled   Boolean            @default(false)
+  reminderTime      String?            @db.VarChar(5)
+  reminderTimezone  String?            @db.VarChar(64)
+  /// Dia (YYYY-MM-DD, no fuso do usuário) do último envio: trava o envio repetido.
+  reminderSentOn    String?            @db.VarChar(10)
+  language          Language           @default(Pt)
+  streakDays        Int                @default(0)
+  lastDreamAt       DateTime?
+  dreamsTotal       Int                @default(0)
+  npsAnswered       Boolean            @default(false)
+  fileUrl           String?            @db.VarChar(1500)
+  fileKey           String?            @db.VarChar(1500)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  adminPermissions  AdminPermission[]
+  files             File[]
+  anamnesisAnswers  AnamnesisAnswer[]
+  dreams            Dream[]
+  dictionary        DictionaryEntry[]
+  insights          Insight[]
+  npsResponses      NpsResponse[]
+  planChanges       PlanChange[]
+  pushSubscriptions PushSubscription[]
 
   @@map("users")
 }
@@ -248,6 +255,21 @@ enum AuthProvider {
   Email
   Google
   Apple
+}
+
+/// Navegador inscrito para receber o lembrete (Web Push, padrão VAPID).
+/// Uma pessoa pode ter vários: celular, computador, o app instalado na tela inicial.
+model PushSubscription {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int
+  endpoint  String   @unique @db.VarChar(500)
+  p256dh    String   @db.VarChar(200)
+  auth      String   @db.VarChar(100)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }
 
 /// Catálogo de planos — o que a tela de planos mostra.

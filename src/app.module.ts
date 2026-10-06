@@ -18,6 +18,8 @@ import { DictionaryModule } from './modules/dictionary/dictionary.module';
 import { JourneyModule } from './modules/journey/journey.module';
 import { NpsModule } from './modules/nps/nps.module';
 import { PlansModule } from './modules/plans/plans.module';
+import { ReminderModule } from './modules/reminder/reminder.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
@@ -28,6 +30,7 @@ import { PlansModule } from './modules/plans/plans.module';
       },
     ]),
     ConfigModule.forRoot({ isGlobal: true }),
+    ScheduleModule.forRoot(),
     PrismaModule,
     AuthModule,
     LoginModule,
@@ -43,6 +46,7 @@ import { PlansModule } from './modules/plans/plans.module';
     JourneyModule,
     NpsModule,
     PlansModule,
+    ReminderModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
