@@ -7,6 +7,16 @@ import { AnswerQuestionsDto } from './dto/answer-questions.dto';
 /** Tamanho de cada bloco da ficha: a abertura e cada nova liberação. */
 const QUESTION_BATCH_SIZE = 5;
 
+/**
+ * Sonhos decodificados para liberar cada novo bloco (padrão 5). Com
+ * ANAMNESIS_DREAMS_PER_RELEASE=0 a ficha inteira fica liberada, de 5 em 5,
+ * sem esperar sonhos — usado para demonstrar o app ao cliente.
+ */
+const dreamsPerRelease = (): number => {
+  const value = Number(process.env.ANAMNESIS_DREAMS_PER_RELEASE ?? QUESTION_BATCH_SIZE);
+  return Number.isInteger(value) && value >= 0 ? value : QUESTION_BATCH_SIZE;
+};
+
 /** Categorias que sobem na fila conforme o conteúdo recente dos sonhos. */
 const PEOPLE_CATEGORIES = ['familia', 'afetivo'];
 const RECURRENCE_CATEGORIES = ['sonhos', 'simbolos'];
@@ -74,8 +84,11 @@ export class DreamerService {
     const followUps = unanswered.filter((q) => q.dependsOnId != null && this.released(q, answerById));
     const base = unanswered.filter((q) => q.dependsOnId == null);
 
+    const every = dreamsPerRelease();
     const allowance =
-      QUESTION_BATCH_SIZE * (1 + Math.floor((user?.dreamsTotal ?? 0) / QUESTION_BATCH_SIZE));
+      every === 0
+        ? Number.POSITIVE_INFINITY
+        : QUESTION_BATCH_SIZE * (1 + Math.floor((user?.dreamsTotal ?? 0) / every));
     const answeredBase = questions.filter((q) => q.dependsOnId == null && answerById.has(q.id)).length;
     const remaining = Math.max(0, allowance - answeredBase);
 
