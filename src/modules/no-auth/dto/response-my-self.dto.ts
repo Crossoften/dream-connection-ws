@@ -6,6 +6,12 @@ export class ResponseMySelfDto extends ResponseAllUserDto {
   @ApiProperty({ enum: Plan })
   plan: string;
 
+  @ApiProperty({
+    nullable: true,
+    description: 'Fim dos 30 dias de teste grátis, contados do cadastro.',
+  })
+  trialEndsAt: Date | null;
+
   @ApiProperty({ description: 'Noites seguidas com sonho decodificado; zera quando passa um dia sem registro.' })
   streakDays: number;
 

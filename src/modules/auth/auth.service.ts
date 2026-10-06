@@ -8,6 +8,7 @@ import { LoginService } from '../login/login.service';
 import { RegisterUserDto } from './dto/register-user.dto';
 import { UserPayload } from './models/UserPayload';
 import { UserToken } from './models/UserToken';
+import { trialEndsAtFrom } from '../plans/trial';
 
 @Injectable()
 export class AuthService {
@@ -49,6 +50,7 @@ export class AuthService {
         password: hashSync(dto.password, 12),
         status: Status.Active,
         provider: 'Email',
+        trialEndsAt: trialEndsAtFrom(),
       },
     });
 
@@ -91,6 +93,7 @@ export class AuthService {
           password: hashSync(randomBytes(24).toString('hex'), 12),
           status: Status.Active,
           provider: 'Google',
+          trialEndsAt: trialEndsAtFrom(),
         },
       })) as any;
     }

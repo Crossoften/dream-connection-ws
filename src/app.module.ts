@@ -17,6 +17,7 @@ import { DreamsModule } from './modules/dreams/dreams.module';
 import { DictionaryModule } from './modules/dictionary/dictionary.module';
 import { JourneyModule } from './modules/journey/journey.module';
 import { NpsModule } from './modules/nps/nps.module';
+import { PlansModule } from './modules/plans/plans.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { NpsModule } from './modules/nps/nps.module';
     DictionaryModule,
     JourneyModule,
     NpsModule,
+    PlansModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

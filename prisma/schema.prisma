@@ -20,6 +20,7 @@ model User {
   status           Status            @default(Pending)
   provider         AuthProvider      @default(Email)
   plan             Plan              @default(Gratuito)
+  trialEndsAt      DateTime?
   language         Language          @default(Pt)
   streakDays       Int               @default(0)
   lastDreamAt      DateTime?
@@ -36,6 +37,7 @@ model User {
   dictionary       DictionaryEntry[]
   insights         Insight[]
   npsResponses     NpsResponse[]
+  planChanges      PlanChange[]
 
   @@map("users")
 }
@@ -248,12 +250,51 @@ enum AuthProvider {
   Apple
 }
 
+/// Catálogo de planos — o que a tela de planos mostra.
+/// O preço do Prata e do Ouro é `null` enquanto o Juarez não o define: plano
+/// sem preço aparece na tela como "a definir" e não pode ser assinado.
+model PlanTier {
+  id          Int      @id @default(autoincrement())
+  key         Plan     @unique
+  name        String   @db.VarChar(40)
+  /// Em centavos, para não arredondar. `null` = a definir.
+  priceCents  Int?
+  description String   @db.VarChar(190)
+  ordering    Int      @default(0)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("plans")
+}
+
+/// Toda troca de plano fica registrada: de onde para onde, e em que situação.
+/// Enquanto não há meio de pagamento integrado, plano pago entra como
+/// `PendentePagamento` — o app mostra isso, para ninguém confundir com assinatura paga.
+model PlanChange {
+  id        Int              @id @default(autoincrement())
+  user      User             @relation(fields: [userId], references: [id])
+  userId    Int
+  fromPlan  Plan
+  toPlan    Plan
+  status    PlanChangeStatus @default(Ativo)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, createdAt])
+  @@map("plan_changes")
+}
+
+enum PlanChangeStatus {
+  Ativo
+  PendentePagamento
+}
+
+/// Os planos que o cliente definiu em 05/10: 30 dias de teste e três pagos.
 enum Plan {
   Gratuito
-  Cobre
+  Bronze
   Prata
   Ouro
-  Diamante
 }
 
 enum Language {

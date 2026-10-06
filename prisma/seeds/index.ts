@@ -3,6 +3,7 @@ import { seedAdmin } from './admin.seeds';
 import { seedUser } from './user.seeds';
 import { seedText } from './text.seeds';
 import { seedAnamnesis } from './anamnesis.seeds';
+import { seedPlan } from './plan.seeds';
 
 const prisma = new PrismaClient();
 
@@ -15,6 +16,7 @@ async function main() {
   await seedUser(prisma);
   await seedText(prisma);
   await seedAnamnesis(prisma);
+  await seedPlan(prisma);
 }
 
 main()

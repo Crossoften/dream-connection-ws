@@ -93,6 +93,7 @@ export class NoAuthService {
         fileUrl: true,
         fileKey: true,
         plan: true,
+        trialEndsAt: true,
         streakDays: true,
         dreamsTotal: true,
         lastDreamAt: true,
