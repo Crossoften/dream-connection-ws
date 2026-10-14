@@ -45,6 +45,17 @@ describe('disparo do lembrete', () => {
     });
   });
 
+  it('aponta para a tela de contar o sonho, relativa ao app (sem barra inicial)', async () => {
+    const { service, pushService } = cenario();
+
+    await service.dispatchDue(DEZ_UTC);
+
+    const payload = pushService.send.mock.calls[0][1];
+    // Com barra inicial o clique caía na raiz do domínio, fora do app (card #459).
+    expect(payload.url).toBe('#/capturar');
+    expect(payload.url.startsWith('/')).toBe(false);
+  });
+
   it('não manda duas vezes no mesmo dia', async () => {
     const { service, pushService } = cenario({ reminderSentOn: '2026-10-06' });
 

@@ -115,7 +115,10 @@ export class ReminderService {
     const payload = {
       title: 'Bom dia — conte seu sonho',
       body: `${name.split(' ')[0]}, o que você sonhou esta noite? Toque para registrar antes de esquecer.`,
-      url: '/#/capturar',
+      // Relativo ao app, SEM barra inicial: o service worker resolve contra o
+      // próprio escopo (/<app>/) e vira /<app>/#/capturar. Com "/#/capturar" o
+      // navegador joga para a raiz do domínio, fora do app (placeholder do nginx).
+      url: '#/capturar',
     };
 
     for (const target of targets) {
