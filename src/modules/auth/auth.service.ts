@@ -1,5 +1,11 @@
 import { PrismaService } from '@database/PrismaService';
-import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Status, User } from '@prisma/client';
 import { compareSync, hashSync } from 'bcrypt';
@@ -9,9 +15,12 @@ import { RegisterUserDto } from './dto/register-user.dto';
 import { UserPayload } from './models/UserPayload';
 import { UserToken } from './models/UserToken';
 import { trialEndsAtFrom } from '../plans/trial';
+import { InvalidFirebaseTokenError, verifyFirebaseIdToken } from './firebase/verify-firebase-token';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly loginService: LoginService,
     private readonly jwtService: JwtService,
@@ -58,27 +67,27 @@ export class AuthService {
   }
 
   /**
-   * Login com Google: valida o idToken do Firebase no endpoint público do
-   * Google (assinatura + audiência do projeto) e cria/reaproveita a conta.
+   * Login com Google: valida o idToken do Firebase (assinatura com as chaves
+   * públicas do Firebase + emissor/audiência do projeto) e cria/reaproveita a conta.
+   * Obs.: o endpoint oauth2.googleapis.com/tokeninfo não aceita ID tokens do Firebase.
    */
   async googleLogin(idToken: string): Promise<UserToken> {
-    const projectId = process.env.FIREBASE_PROJECT_ID || 'noturnoproxy2';
+    const projectId = process.env.FIREBASE_PROJECT_ID;
+    if (!projectId) throw new UnauthorizedException('Login com Google não configurado.');
 
-    const response = await fetch(
-      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`,
-    );
-    if (!response.ok) throw new UnauthorizedException('Token Google inválido.');
-
-    const claims: any = await response.json();
-    const issOk =
-      claims.iss === `https://securetoken.google.com/${projectId}` ||
-      claims.iss === 'https://accounts.google.com';
-    const audOk = claims.aud === projectId;
-    if (!issOk || !audOk || !claims.email) {
-      throw new UnauthorizedException('Token Google inválido.');
+    let claims: any;
+    try {
+      claims = await verifyFirebaseIdToken(idToken, projectId);
+    } catch (error) {
+      if (error instanceof InvalidFirebaseTokenError) {
+        this.logger.warn(`Token Google recusado: ${error.message}`);
+        throw new UnauthorizedException('Token Google inválido.');
+      }
+      this.logger.error(`Falha ao validar token Google: ${error?.message}`);
+      throw new ServiceUnavailableException('Não foi possível validar o login com Google.');
     }
-    if (Number(claims.exp) * 1000 < Date.now()) {
-      throw new UnauthorizedException('Token Google expirado.');
+    if (!claims.email || claims.email_verified === false) {
+      throw new UnauthorizedException('Token Google inválido.');
     }
 
     const email = String(claims.email).toLowerCase();
